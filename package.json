@@ -16,9 +16,16 @@
   "dependencies": {
     "@google-cloud/storage": "^5.7.0",
     "cors": "^2.8.5",
+    "discord.js": "^12.5.1",
     "express": "^4.17.1",
+    "express-form-data": "^2.0.14",
+    "express-ws": "^4.0.0",
+    "fast-crc32c": "^2.0.0",
     "greenlock-express": "^4.0.3",
-    "helmet": "^4.2.0"
+    "helmet": "^4.2.0",
+    "kobu-lib": "github:Ohorime/kobu-lib",
+    "mongoose": "^5.11.8",
+    "ws": "^7.4.1"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

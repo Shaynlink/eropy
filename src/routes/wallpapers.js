@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const {bucket} = require('./../storage');
+const {bucket} = require('../storage');
 
 router.get('/:id', async (req, res) => {
     const maxResults = !isNaN(parseInt(req.query.maxresults)) ?
@@ -28,9 +28,6 @@ router.get('/:id/:name', async (req, res) => {
             message: 'File not found',
         });
     };
-
-    console.log(files);
-
     return res.status(200).json(files.metadata);
 });
 
