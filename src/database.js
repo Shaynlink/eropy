@@ -51,8 +51,8 @@ let credentials = new Schema({
 
 credentials.method('gen', async function(id) {
     this.token = `${
-        Buffer.from(id || this.id).toString('base64')
-    }.${Buffer.from(String(process.pid))}.${Buffer.from(String(Date.now()))}`;
+        Buffer.from(typeof id == 'string' ? id : id?.toString() || typeof this.id == 'string' ? this.id : this.id?.toString()).toString('base64')
+    }.${Buffer.from(String(process.pid)).toString('base64')}.${Buffer.from(String(Date.now())).toString('base64')}`;
 
     this.timestamp = Date.now() + 1e3*(60**2)*24;
 
@@ -62,6 +62,51 @@ credentials.method('gen', async function(id) {
 });
 
 model('Credentials', credentials);
+
+/**
+ * TYPE
+ *  - PAGE_VIEWS
+ *  - DOWNLOADED
+ *  - LIKED
+ *  - FOLLOWING
+ *  - FOLLOWER
+ *  - WALLPAPER_VIEWS
+ *  - LOADED
+ *  - USER
+ *  - USER_AVATAR
+ * 
+ * ACTION
+ *  - ADD
+ *  - REMOVE
+ *  - UPDATE
+ */
+model('AuditLogs', new Schema({
+    id: {
+        type: Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        unique: false,
+    },
+    type: {
+        type: String,
+        required: true,
+        index: true,
+        unique: false,
+    },
+    action: {
+        type: String,
+        required: true,
+        index: true,
+    },
+    data: {
+        type: Schema.Types.Mixed,
+        required: true,
+    },
+    timestamp: {
+        type: Number,
+        default: Date.now(),
+    },
+}));
 
 model('Analytics', new Schema({
     id: {

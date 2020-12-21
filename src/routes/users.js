@@ -7,6 +7,16 @@ const Panic = require('../Panic');
 const { bucket } = require('./../storage');
 const cache = require('./../cache');
 
+function bo(text) {
+    const regex = /[A-Z]/g;
+    text = text.replaceAll(/ +/g, '_');
+    let index = text.search(regex);
+    if (index == -1) return text;
+    else if (index == 0) text = text.replace(text[index], text[index].toLowerCase());
+    else text = text.replace(text[index], `_${text[index].toLowerCase()}`);
+    return bo(text);
+};
+
 router.use(async (req, res, next) => {
     let panic;
     if (!req.headers.authorization) {
@@ -48,10 +58,24 @@ router.patch('/', async (req, res) => {
     };
 
     const update = await user.updateOne(data)
-    .then(() => {
+    .then(async () => {
+        let ws;
         if (cache.has(req.credential.token)) {
-            cache.get(req.credential.token).ws.send(JSON.stringify({op: 4, t: 'USER_UPDATE', d: data}));
+            ws = cache.get(req.credential.token).ws;
+            ws.send(JSON.stringify({op: 4, t: 'USER_UPDATE', d: data}));
         };
+        await mongoose.model('AuditLogs').create({
+            id: user._id,
+            type: 'USER',
+            data: data, 
+        }).then(() => {
+            ws?.send(JSON.stringify({op: 4, t: 'AUDIT_LOG', d: {
+                id: user._id,
+                type: 'USER',
+                action: 'UPDATE',
+                data: data,
+            }}));
+        });
     }).catch((err) => {
         if (!panic) panic = new Panic();
         panic.addbyRequest('Unknown error', req, err);
@@ -95,10 +119,25 @@ router.post('/avatar', async (req, res) => {
 
     const update = await user.updateOne({
         avatar: name,
-    }).then(() => {
+    }).then(async () => {
+        let ws;
         if (cache.has(req.credential.token)) {
-            cache.get(req.credential.token).ws.send(JSON.stringify({op: 4, t: 'USER_AVATAR_UPDATE', d: name}));
+            ws = cache.get(req.credential.token).ws;
+            ws.send(JSON.stringify({op: 4, t: 'USER_AVATAR_UPDATE', d: name}));
         };
+        await mongoose.model('AuditLogs').create({
+            id: user._id,
+            type: 'USER_AVATAR',
+            action: 'UPDATE',
+            data: data,
+        }).then(() => {
+            ws?.send(JSON.stringify({op: 4, t: 'AUDIT_LOG', d: {
+                id: user._id,
+                type: 'USER_AVATAR',
+                action: 'UPDATE',
+                data: data,
+            }}));
+        });
     }).catch((err) => {
         if (!panic) panic = new Panic();
         panic.addbyRequest('Unknow error', req, err);
@@ -118,59 +157,102 @@ router.put('/analytics', async (req, res) => {
     const analytic = await mongoose.model('Analytics').findOne({id: req.credential.id});
 
     const data = {};
+    const _data = {
+        add: {},
+        remove: {},
+        update: {},
+    };
 
     if (req.body.connection) {
         if (!data.$push) data.$push = {};
-        data.$push.connection = req.body.connection;
+        data.$push.connection = _data.add.connection = req.body.connection;
     };
     if (req.body.loaded) {
         if (!data.$inc) data.$inc = {};
-        data.$inc.loaded = req.body.loaded;
+        data.$inc.loaded = _data.update.loaded = req.body.loaded;
     };
     if (req.body.downloaded) {
         if (!data.$push) data.$push = {};
-        data.$push.downloaded = req.body.downloaded;
+        data.$push.downloaded = _data.add.downloaded = req.body.downloaded;
     };
     if (req.body.liked?.startsWith('DEL-')) {
         if (!data.$pull) data.$pull = {};
-        data.$pull.liked = req.body.liked.replace('DEL-', '');
+        data.$pull.liked = _data.remove.liked = req.body.liked.replace('DEL-', '');
     } else if (req.body.liked) {
         if (!data.$push) data.$push = {};
-        if (!analytic.liked.includes(req.body.liked)) data.$push.liked = req.body.liked;
+        if (!analytic.liked.includes(req.body.liked)) data.$push.liked = _data.add.liked = req.body.liked;
     };
     if (req.body.following?.startsWith('DEL-')) {
         if (!data.$pull) data.$pull = {};
-        data.$pull.following = req.body.following.replace('DEL-', '');
+        data.$pull.following = _data.remove.following = req.body.following.replace('DEL-', '');
     } else if (req.body.following) {
         if (!data.$push) data.$push = {};
-        if (!analytic.following.includes(req.body.following)) data.$push.following = req.body.following;
+        if (!analytic.following.includes(req.body.following)) data.$push.following = _data.add.following = req.body.following;
     };
     if (req.body.follower?.startsWith('DEL-')) {
         if (!data.$pull) data.$pull = {};
-        data.$pull.follower = req.body.follower.replace('DEL-', '');
+        data.$pull.follower = _data.remove.follower =  req.body.follower.replace('DEL-', '');
     } else if (req.body.follower) {
         if (!data.$push) data.$push = {};
-        if (!analytic.follower.includes(req.body.follower)) data.$push.follower = req.body.follower;
+        if (!analytic.follower.includes(req.body.follower)) data.$push.follower = _data.add.follower = req.body.follower;
     };
     if (req.body.wallpaperViews?.startsWith('DEL-')) {
         if (!data.$pull) data.$pull = {};
-        data.$pull.wallpaperViews = req.body.wallpaperViews.replace('DEL-', '');
+        data.$pull.wallpaperViews = _data.remove.wallpaperViews = req.body.wallpaperViews.replace('DEL-', '');
     } else if (req.body.wallpaperViews) {
         if (!data.$push) data.$push = {};
-        if (!analytic.wallpaperViews.includes(req.body.wallpaperViews)) data.$push.wallpaperViews = req.body.wallpaperViews;
+        if (!analytic.wallpaperViews.includes(req.body.wallpaperViews)) data.$push.wallpaperViews = _data.add.wallpaperViews = req.body.wallpaperViews;
     };
 
-    await analytic.updateOne(data).then(() => {
+    await analytic.updateOne(data).then(async () => {
+        let ws;
         if (cache.has(req.credential.token)) {
-            cache.get(req.credential.token).ws.send(JSON.stringify({op: 4, t: 'ANALYTICS_UPDATE', d: data}));
+            ws = cache.get(req.credential.token).ws
+            ws.send(JSON.stringify({op: 4, t: 'ANALYTICS_UPDATE', d: data}));
         };
+        Object.entries(_data.add).forEach(async ([key, value]) => {
+            let construct = {
+                _id: mongoose.Types.ObjectId(),
+                id: req.credential.id,
+                type: bo(key).toUpperCase(),
+                action: 'ADD',
+                data: value,
+            };
+            await mongoose.model('AuditLogs').create(construct).then(() => {
+                ws?.send(JSON.stringify({op: 4, t: 'AUDIT_LOG', d: construct}));
+            });
+        });
+        Object.entries(_data.update).forEach(async ([key, value]) => {
+            let construct = {
+                _id: mongoose.Types.ObjectId(),
+                id: req.credential.id,
+                type: bo(key).toUpperCase(),
+                action: 'UPDATE',
+                data: value,
+            };
+            await mongoose.model('AuditLogs').create(construct).then(() => {
+                ws?.send(JSON.stringify({op: 4, t: 'AUDIT_LOG', d: construct}));
+            });
+        });
+        Object.entries(_data.remove).forEach(async ([key, value]) => {
+            let construct = {
+                _id: mongoose.Types.ObjectId(),
+                id: req.credential.id,
+                type: bo(key).toUpperCase(),
+                action: 'REMOVE',
+                data: value,
+            };
+            await mongoose.model('AuditLogs').create(construct).then(() => {
+                ws?.send(JSON.stringify({op: 4, t: 'AUDIT_LOG', d: construct}));
+            });
+        });
         return res.status(204).end();
     }).catch((err) => {
         return res.status(404).json(new Panic().addbyRequest('Unknown error', req, err).toJSON());
     });
 });
 
-router.get('/get/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
     if (req.params.id.length != 12 && req.params.id.length != 24) {
         return res.status(400).json(new Panic().addbyRequest('Bad ID', req).toJSON());
     };

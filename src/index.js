@@ -38,6 +38,7 @@ http.createServer(app)
  *         |-> ANALYTICS_UPDATE
  *         |-> USER_UPDATE
  *         |-> USER_AVATAR_UPDATE
+ *         |-> AUDIT_LOG
  * 5 READY : client <- server
  * 
  * ERROR
@@ -90,7 +91,9 @@ wsServer.on('connection', (ws, req) => {
                     credential,
                 });
 
-                ws.send(JSON.stringify({op: 5, d: null}));
+                ws.send(JSON.stringify({op: 5, d: { 
+                    auditlogs: await mongoose.model('AuditLogs').find({id: credential.id}).catch(console.error),
+                }}));
             break;
             default:
                 console.log(json);
